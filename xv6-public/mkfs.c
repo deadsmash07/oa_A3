@@ -16,6 +16,9 @@
 #endif
 
 #define NINODES 200
+#define SWAP_BLOCKS 6400
+#define SWAP_START 2
+#define LOG_START (SWAP_START + SWAP_BLOCKS)
 
 // Disk layout:
 // [ boot block | sb block | log | inode blocks | free bit map | data blocks ]
@@ -91,16 +94,16 @@ main(int argc, char *argv[])
   }
 
   // 1 fs block = 1 disk sector
-  nmeta = 2 + nlog + ninodeblocks + nbitmap;
+  nmeta = LOG_START + nlog + ninodeblocks + nbitmap;
   nblocks = FSSIZE - nmeta;
 
   sb.size = xint(FSSIZE);
   sb.nblocks = xint(nblocks);
   sb.ninodes = xint(NINODES);
   sb.nlog = xint(nlog);
-  sb.logstart = xint(2);
-  sb.inodestart = xint(2+nlog);
-  sb.bmapstart = xint(2+nlog+ninodeblocks);
+  sb.logstart = xint(LOG_START);
+  sb.inodestart = xint(LOG_START+nlog);
+  sb.bmapstart = xint(LOG_START+nlog+ninodeblocks);
 
   printf("nmeta %d (boot, super, log blocks %u inode blocks %u, bitmap blocks %u) blocks %d total %d\n",
          nmeta, nlog, ninodeblocks, nbitmap, nblocks, FSSIZE);
@@ -239,16 +242,20 @@ balloc(int used)
 {
   uchar buf[BSIZE];
   int i;
+  int b = 0;
 
   printf("balloc: first %d blocks have been allocated\n", used);
-  assert(used < BSIZE*8);
-  bzero(buf, BSIZE);
-  for(i = 0; i < used; i++){
-    buf[i/8] = buf[i/8] | (0x1 << (i%8));
+
+  for (i = 0; i < nbitmap; i++) {
+    bzero(buf, BSIZE);
+    for (int j = 0; j < BSIZE * 8 && b < used; j++, b++) {
+      buf[j/8] |= 1 << (j%8);
+    }
+    printf("balloc: write bitmap block at sector %d\n", sb.bmapstart + i);
+    wsect(sb.bmapstart + i, buf);
   }
-  printf("balloc: write bitmap block at sector %d\n", sb.bmapstart);
-  wsect(sb.bmapstart, buf);
 }
+
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 

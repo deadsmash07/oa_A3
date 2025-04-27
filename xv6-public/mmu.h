@@ -91,6 +91,7 @@ struct segdesc {
 #define PGROUNDDOWN(a) (((a)) & ~(PGSIZE-1))
 
 // Page table/directory entry flags.
+#define PTE_A           0x020   // Accessed         
 #define PTE_P           0x001   // Present
 #define PTE_W           0x002   // Writeable
 #define PTE_U           0x004   // User

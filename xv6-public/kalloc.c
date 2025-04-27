@@ -8,6 +8,16 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "spinlock.h"
+#include "pageswap.h"
+
+
+int swap_ready = 0;
+
+extern int Th;
+extern int Npg;
+extern const int LIMIT;
+extern struct spinlock swtchlock;
+extern struct swap_slot swap_slots[NSLOTS];
 
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
@@ -76,6 +86,19 @@ kfree(char *v)
     release(&kmem.lock);
 }
 
+int
+count_free_pages() {
+  int count = 0;
+  struct run *r = kmem.freelist;
+  while(r) {
+    count++;
+    r = r->next;
+  }
+  // cprintf("Free pages: %d\n", count);
+  return count;
+}
+
+
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
@@ -84,6 +107,22 @@ kalloc(void)
 {
   struct run *r;
 
+  
+  // Check if free pages are below threshold
+  if (swap_ready && count_free_pages() <= Th) {
+
+    cprintf("Current Threshold = %d, Swapping %d pages\n", Th, Npg);
+    for (int i = 0; i < Npg; i++) {
+      if (swap_out_page() < 0)
+        break;
+    }
+   
+    Th = (Th * (100 - BETA)) / 100;
+    if ((Npg * (100 + ALPHA)) / 100 < LIMIT)
+      Npg = (Npg * (100 + ALPHA)) / 100;
+    
+  }
+
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
@@ -91,6 +130,8 @@ kalloc(void)
     kmem.freelist = r->next;
   if(kmem.use_lock)
     release(&kmem.lock);
+
   return (char*)r;
 }
+
 

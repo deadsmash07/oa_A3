@@ -7,9 +7,13 @@
 #include "x86.h"
 #include "elf.h"
 
+extern int swap_ready;
+
 int
 exec(char *path, char **argv)
 {
+  swap_ready = 1;
+
   char *s, *last;
   int i, off;
   uint argc, sz, sp, ustack[3+MAXARG+1];
@@ -99,6 +103,8 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
+  curproc->rss = (sz + PGSIZE - 1) / PGSIZE;
+
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;

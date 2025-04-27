@@ -112,6 +112,7 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  p->rss = 0;
   return p;
 }
 
@@ -199,7 +200,7 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
-
+  np->rss = curproc->rss;
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
 
@@ -246,6 +247,7 @@ exit(void)
   iput(curproc->cwd);
   end_op();
   curproc->cwd = 0;
+  curproc->rss = 0;
 
   acquire(&ptable.lock);
 
@@ -432,7 +434,7 @@ sleep(void *chan, struct spinlock *lk)
   // (wakeup runs with ptable.lock locked),
   // so it's okay to release lk.
   if(lk != &ptable.lock){  //DOC: sleeplock0
-    acquire(&ptable.lock);  //DOC: sleeplock1
+    acquire(&ptable.lock);  //DOC: sleeplock1   
     release(lk);
   }
   // Go to sleep.

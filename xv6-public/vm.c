@@ -33,7 +33,7 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
-static pte_t *
+pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
   pde_t *pde;
@@ -58,7 +58,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
-static int
+int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
   char *a, *last;
@@ -121,9 +121,10 @@ setupkvm(void)
 {
   pde_t *pgdir;
   struct kmap *k;
-
+  
   if((pgdir = (pde_t*)kalloc()) == 0)
     return 0;
+
   memset(pgdir, 0, PGSIZE);
   if (P2V(PHYSTOP) > (void*)DEVSPACE)
     panic("PHYSTOP too high");
@@ -245,6 +246,9 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       kfree(mem);
       return 0;
     }
+
+    if(myproc())
+      myproc()->rss++;
   }
   return newsz;
 }
@@ -274,6 +278,8 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       char *v = P2V(pa);
       kfree(v);
       *pte = 0;
+      if(myproc() != 0)
+        myproc()->rss--;
     }
   }
   return newsz;

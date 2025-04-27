@@ -27,6 +27,29 @@ static void itrunc(struct inode*);
 // only one device
 struct superblock sb; 
 
+void
+rsect(uint sec, void *buf)
+{
+  struct buf *b = bread(ROOTDEV, sec);
+  memmove(buf, b->data, BSIZE);
+  brelse(b);
+}
+
+void
+wsect(uint sec, void *buf)
+{
+  struct buf *b = bread(ROOTDEV, sec);
+  
+
+  memmove(b->data, buf, BSIZE);
+  
+  log_write(b);   // because file system is journaled
+
+  
+  brelse(b);
+}
+
+
 // Read the super block.
 void
 readsb(int dev, struct superblock *sb)

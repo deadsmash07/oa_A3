@@ -7,12 +7,52 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
+#include "fs.h"
+#include "sleeplock.h"
+#include "buf.h"
+#include "pageswap.h"
 
-// Interrupt descriptor table (shared by all CPUs).
+// Declarations for external functions
+pte_t* walkpgdir(pde_t *pgdir, const void *va, int alloc);
+int mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+void rsect(uint sec, void *buf);
+int swap_out_page(void);
+
+
+// Interrupt descriptor table (shared by all CPUs)
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
+
+extern struct swap_slot swap_slots[NSLOTS];
+extern struct spinlock swtchlock;
+extern struct {
+  struct spinlock lock;
+  struct proc proc[NPROC];
+} ptable;
+
+void clear_pte_a_for_10_percent() {
+    struct proc *p;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) { // Iterate all processes
+        if(p->state == UNUSED) continue;
+        pte_t *pte;
+        uint va;
+        // Walk the page table and clear PTE_A for ~10% of pages
+        acquire(&tickslock);
+        uint count = ticks;
+        release(&tickslock);
+        uint start = count%p->sz;
+        start = PGSIZE * (start / PGSIZE); // Align to page size
+        for(va = start; va < p->sz; va += PGSIZE) {
+            count++;
+            pte = walkpgdir(p->pgdir, (char *) va, 0); // Get PTE
+            if(pte && (*pte & PTE_A) && (count % 10 == 0)) { // 10% chance
+                *pte &= ~PTE_A; // Clear Accessed bit
+            }
+        }
+    }
+}
 
 void
 tvinit(void)
@@ -47,6 +87,81 @@ trap(struct trapframe *tf)
   }
 
   switch(tf->trapno){
+  case T_PGFLT: {
+    uint fault_va = rcr2();
+    struct proc *p = myproc();
+    cprintf("%d: page fault at va %d\n", p->pid, fault_va);
+    if(p == 0 || p->pgdir == 0){
+      cprintf("Page fault in kernel or no pgdir\n");
+      p->killed = 1;
+      break;
+    }
+
+    pte_t *pte = walkpgdir(p->pgdir, (char*)fault_va, 0);
+    if(pte == 0){
+      cprintf("Page fault: no PTE for addr 0x%x\n", fault_va);
+      p->killed = 1;
+      break;
+    }
+    if(*pte & PTE_P){
+      cprintf("Unexpected page fault on present page at 0x%x\n", fault_va);
+      p->killed = 1;
+      break;
+    }
+    uint va_base = fault_va & 0xFFFFF000;
+    acquire(&swtchlock);
+
+    int slot;
+    for(slot = 0; slot < NSLOTS; slot++){
+      if(swap_slots[slot].va == va_base && swap_slots[slot].pid == p->pid)
+        break;
+    }
+
+    if(slot >= NSLOTS){
+      cprintf("Invalid swap slot index: %d\n", slot);
+      p->killed = 1;
+      release(&swtchlock);
+      break;
+    }
+
+    if(swap_slots[slot].is_free){
+      cprintf("PTE points to slot %d, but slot is marked free\n", slot);
+      release(&swtchlock);
+      p->killed = 1;
+      break;
+    }
+    swap_slots[slot].is_free = 1;
+    release(&swtchlock);
+
+    char *mem = kalloc();
+    if(mem == 0){
+      cprintf("kalloc failed in page fault handler\n");
+      p->killed = 1;
+      break;
+    }
+
+    cprintf("Swapped in page at 0x%x from slot %d\n", fault_va, slot);
+    for(int i = 0; i < 8; i++){
+      begin_op();
+      rsect(swap_slots[slot].start_block + i, mem + i * 512);
+      end_op();
+    }
+
+    if(mappages(p->pgdir, (void*)PGROUNDDOWN(fault_va), PGSIZE,
+                V2P(mem), swap_slots[slot].page_perm | PTE_P) < 0){
+      cprintf("mappages failed in page fault handler\n");
+      kfree(mem);
+      release(&swtchlock);
+      p->killed = 1;
+      break;
+    }
+    *pte &= ~PTE_A;
+  
+    p->rss++;
+
+    break;
+  }
+
   case T_IRQ0 + IRQ_TIMER:
     if(cpuid() == 0){
       acquire(&tickslock);
@@ -54,6 +169,7 @@ trap(struct trapframe *tf)
       wakeup(&ticks);
       release(&tickslock);
     }
+    clear_pte_a_for_10_percent();
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE:
@@ -61,7 +177,6 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE+1:
-    // Bochs generates spurious IDE1 interrupts.
     break;
   case T_IRQ0 + IRQ_KBD:
     kbdintr();
@@ -78,15 +193,12 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
 
-  //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
-      // In kernel, it must be our mistake.
       cprintf("unexpected trap %d from cpu %d eip %x (cr2=0x%x)\n",
               tf->trapno, cpuid(), tf->eip, rcr2());
       panic("trap");
     }
-    // In user space, assume process misbehaved.
     cprintf("pid %d %s: trap %d err %d on cpu %d "
             "eip 0x%x addr 0x%x--kill proc\n",
             myproc()->pid, myproc()->name, tf->trapno,
@@ -95,13 +207,10 @@ trap(struct trapframe *tf)
   }
 
   // Force process exit if it has been killed and is in user space.
-  // (If it is still executing in the kernel, let it keep running
-  // until it gets to the regular system call return.)
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)
     exit();
 
   // Force process to give up CPU on clock tick.
-  // If interrupts were on while locks held, would need to check nlock.
   if(myproc() && myproc()->state == RUNNING &&
      tf->trapno == T_IRQ0+IRQ_TIMER)
     yield();

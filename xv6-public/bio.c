@@ -99,6 +99,7 @@ bread(uint dev, uint blockno)
   struct buf *b;
 
   b = bget(dev, blockno);
+  
   if((b->flags & B_VALID) == 0) {
     iderw(b);
   }
@@ -138,6 +139,7 @@ brelse(struct buf *b)
   }
   
   release(&bcache.lock);
+  
 }
 //PAGEBREAK!
 // Blank page.

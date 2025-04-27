@@ -55,3 +55,7 @@ struct dirent {
   char name[DIRSIZ];
 };
 
+void rsect(uint sec, void *buf);
+void wsect(uint sec, void *buf);
+
+
