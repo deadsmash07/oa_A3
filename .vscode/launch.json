@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "/Users/nisargpandya/Desktop/COL331/A3/oa_A3/xv6-public",
+      "program": "/Users/nisargpandya/Desktop/COL331/A3/oa_A3/xv6-public/build/Debug/outDebug"
+    }
+  ]
+}
