@@ -11,8 +11,6 @@ struct swap_slot {
     int is_free;
     int page_perm;
     int start_block;
-    int pid;
-    uint va;
 };
 
 extern int Th;

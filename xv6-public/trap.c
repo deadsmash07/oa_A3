@@ -90,9 +90,15 @@ trap(struct trapframe *tf)
   case T_PGFLT: {
     uint fault_va = rcr2();
     struct proc *p = myproc();
-    cprintf("%d: page fault at va %d\n", p->pid, fault_va);
     if(p == 0 || p->pgdir == 0){
       cprintf("Page fault in kernel or no pgdir\n");
+      p->killed = 1;
+      break;
+    }
+    cprintf("%d: page fault at va %d with sz %d\n", p->pid, fault_va, p->sz);
+
+    if(fault_va >= p->sz){
+      cprintf("Page fault: va %d out of bounds\n", fault_va);
       p->killed = 1;
       break;
     }
@@ -108,14 +114,10 @@ trap(struct trapframe *tf)
       p->killed = 1;
       break;
     }
-    uint va_base = fault_va & 0xFFFFF000;
     acquire(&swtchlock);
 
-    int slot;
-    for(slot = 0; slot < NSLOTS; slot++){
-      if(swap_slots[slot].va == va_base && swap_slots[slot].pid == p->pid)
-        break;
-    }
+    int slot = (*pte) >> 12;
+    
 
     if(slot >= NSLOTS){
       cprintf("Invalid swap slot index: %d\n", slot);
@@ -169,7 +171,7 @@ trap(struct trapframe *tf)
       wakeup(&ticks);
       release(&tickslock);
     }
-    clear_pte_a_for_10_percent();
+    // clear_pte_a_for_10_percent();
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE:

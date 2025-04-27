@@ -120,6 +120,8 @@ kalloc(void)
     Th = (Th * (100 - BETA)) / 100;
     if ((Npg * (100 + ALPHA)) / 100 < LIMIT)
       Npg = (Npg * (100 + ALPHA)) / 100;
+    else 
+      Npg = LIMIT;
     
   }
 
@@ -130,7 +132,7 @@ kalloc(void)
     kmem.freelist = r->next;
   if(kmem.use_lock)
     release(&kmem.lock);
-
+  
   return (char*)r;
 }
 

@@ -12,6 +12,8 @@
 
 // external function prototypes
 pte_t* walkpgdir(pde_t *pgdir, const void *va, int alloc);
+void wsect(uint sec, void *buf);
+
 
 struct swap_slot swap_slots[NSLOTS];
 struct spinlock swtchlock;
@@ -35,8 +37,6 @@ void initswap() {
         swap_slots[i].is_free = 1;
         swap_slots[i].page_perm = 0;
         swap_slots[i].start_block = 2 + i * 8; // From SWAPSTART
-        swap_slots[i].pid = -1; // No process assigned
-        swap_slots[i].va = 0; // No virtual address assigned
     }
 }
 
@@ -64,7 +64,7 @@ uint select_victim_page(struct proc *p, pte_t **victim_pte) {
   // You can search user space in steps of PGSIZE.
   for(va = 0; va < p->sz; va += PGSIZE) {
     pte = walkpgdir(p->pgdir, (char*)va, 0);
-    if(pte && (*pte & PTE_P) && !(*pte & PTE_A)) {
+    if(pte && (*pte & PTE_P)) {
       if(victim_pte)
         *victim_pte = pte;
       return va;
@@ -114,8 +114,6 @@ int swap_out_page(void) {
   swap_slots[slot].is_free = 0;
   // You may extract page permissions from *victim_pte, e.g., user, read/write bits.
   swap_slots[slot].page_perm = (*victim_pte) & 0xFFF;  // lower 12 bits could store permission bits
-  swap_slots[slot].pid = vp->pid;
-  swap_slots[slot].va = victim_va;
   cprintf("Swapping out page from process %d, va %d\n", vp->pid, victim_va);
   // 4. Write the page content into the swap slot.
   // Each swap slot represents 8 disk blocks.
@@ -134,7 +132,8 @@ int swap_out_page(void) {
   }
   
   // 5. Update the page table entry: clear the PTE_P flag.
-  *victim_pte &= ~PTE_P;
+  *victim_pte = (slot << 12);
+;
   
   // 6. Adjust the process's resident page count.
   // Using myproc() might not be applicable here since we're in the context of the victim process.
