@@ -39,15 +39,15 @@ void clear_pte_a_for_10_percent() {
         pte_t *pte;
         uint va;
         // Walk the page table and clear PTE_A for ~10% of pages
-        // acquire(&tickslock);
-        // uint count = ticks;
-        // release(&tickslock);
-        // uint start = count%p->sz;
-        // start = PGSIZE * (start / PGSIZE); // Align to page size
+        acquire(&tickslock);
+        uint count = ticks;
+        release(&tickslock);
+        uint start = count%p->sz;
+        start = PGSIZE * (start / PGSIZE); // Align to page size
         for(va = 0; va < p->sz; va += PGSIZE) {
-            // count++;
+            count++;
             pte = walkpgdir(p->pgdir, (char *) va, 0); // Get PTE
-            if(pte && (*pte & PTE_A) ) { 
+            if(pte && (*pte & PTE_A) && (*pte & PTE_P) ) { 
                 *pte &= ~PTE_A; // Clear Accessed bit
             }
         }
@@ -90,12 +90,13 @@ trap(struct trapframe *tf)
   case T_PGFLT: {
     uint fault_va = rcr2();
     struct proc *p = myproc();
+    fault_va = PGROUNDDOWN(fault_va);
     if(p == 0 || p->pgdir == 0){
       cprintf("Page fault in kernel or no pgdir\n");
       p->killed = 1;
       break;
     }
-    cprintf("%d: page fault at va %d with sz %d\n", p->pid, fault_va, p->sz);
+    // cprintf("%d: page fault at va %d with sz %d\n", p->pid, fault_va, p->sz);
 
     if(fault_va >= p->sz){
       cprintf("Page fault: va %d out of bounds\n", fault_va);
@@ -114,7 +115,7 @@ trap(struct trapframe *tf)
       p->killed = 1;
       break;
     }
-    acquire(&swtchlock);
+    // acquire(&swtchlock);
 
     int slot = (*pte) >> 12;
     
@@ -122,18 +123,16 @@ trap(struct trapframe *tf)
     if(slot >= NSLOTS){
       cprintf("Invalid swap slot index: %d\n", slot);
       p->killed = 1;
-      release(&swtchlock);
+      // release(&swtchlock);
       break;
     }
 
     if(swap_slots[slot].is_free){
       cprintf("PTE points to slot %d, but slot is marked free\n", slot);
-      release(&swtchlock);
+      // release(&swtchlock);
       p->killed = 1;
       break;
     }
-    swap_slots[slot].is_free = 1;
-    release(&swtchlock);
 
     char *mem = kalloc();
     if(mem == 0){
@@ -141,25 +140,28 @@ trap(struct trapframe *tf)
       p->killed = 1;
       break;
     }
-
-    cprintf("Swapped in page at 0x%x from slot %d\n", fault_va, slot);
+    // release(&swtchlock);
     for(int i = 0; i < 8; i++){
-      begin_op();
+      // begin_op();
       rsect(swap_slots[slot].start_block + i, mem + i * 512);
-      end_op();
+      // end_op();
     }
+    acquire(&swtchlock);
+    swap_slots[slot].is_free = 1;
+    release(&swtchlock);
 
     if(mappages(p->pgdir, (void*)PGROUNDDOWN(fault_va), PGSIZE,
                 V2P(mem), swap_slots[slot].page_perm | PTE_P) < 0){
       cprintf("mappages failed in page fault handler\n");
       kfree(mem);
-      release(&swtchlock);
+      // release(&swtchlock);
       p->killed = 1;
       break;
     }
     *pte &= ~PTE_A;
   
     p->rss++;
+    // cprintf("Swapped in page at 0x%x from slot %d\n", fault_va, slot);
 
     break;
   }

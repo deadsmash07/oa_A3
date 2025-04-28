@@ -43,7 +43,7 @@ wsect(uint sec, void *buf)
 
   memmove(b->data, buf, BSIZE);
   
-  log_write(b);   // because file system is journaled
+  bwrite(b);   // because file system is journaled
 
   
   brelse(b);

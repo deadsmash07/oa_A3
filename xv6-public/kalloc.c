@@ -113,9 +113,10 @@ kalloc(void)
 
     cprintf("Current Threshold = %d, Swapping %d pages\n", Th, Npg);
     for (int i = 0; i < Npg; i++) {
-      if (swap_out_page() < 0)
+      if (swap_out_page() < 0){
         cprintf("swap_out_page failed\n");  
         break;
+      }
     }
    
     Th = (Th * (100 - BETA)) / 100;

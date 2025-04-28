@@ -111,29 +111,30 @@ int swap_out_page(void) {
   }
   
   // Mark the slot as in-use (temporarily) and record page permissions.
-  swap_slots[slot].is_free = 0;
   // You may extract page permissions from *victim_pte, e.g., user, read/write bits.
   swap_slots[slot].page_perm = (*victim_pte) & 0xFFF;  // lower 12 bits could store permission bits
-  cprintf("Swapping out page from process %d, va %d\n", vp->pid, victim_va);
+  // cprintf("Swapping out page from process %d, va %d to slot %d\n", vp->pid, victim_va, slot);
   // 4. Write the page content into the swap slot.
   // Each swap slot represents 8 disk blocks.
   // Calculate starting block from swap_slots[slot].start_block.
-  release(&swtchlock);
     
+  release(&swtchlock);
   
   char *v = P2V(PTE_ADDR(*victim_pte));
   for (int i = 0; i < 8; i++) {
     // Write each block (512 bytes) from the page into disk.
     // You will need to use wsect() or similar function to write to disk.
     // Example:
-    begin_op();
+    // begin_op();
     wsect(swap_slots[slot].start_block + i, v + i * 512);
-    end_op();
+    // end_op();
   }
-  
+  acquire(&swtchlock);
+  swap_slots[slot].is_free = 0;
+  release(&swtchlock);
   // 5. Update the page table entry: clear the PTE_P flag.
-  *victim_pte = (slot << 12) | (PTE_FLAGS(*victim_pte) & ~PTE_P);;
-;
+  *victim_pte = (slot << 12) | (PTE_FLAGS(*victim_pte) & ~PTE_P);
+  kfree(v);
   
   // 6. Adjust the process's resident page count.
   // Using myproc() might not be applicable here since we're in the context of the victim process.

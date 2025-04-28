@@ -43,10 +43,10 @@ mem(void)
 	while (count != total_count) {
 		if (((int*)m1)[2] != count)
 		{
-			printf(1, "count %d != %d\n", ((int*)m1)[2], count);
+			// printf(1, "count %d != %d\n", ((int*)m1)[2], count);
 			goto failed;
 		}
-		printf(1, "count %d = %d\n", ((int*)m1)[2], count);
+		// printf(1, "count %d = %d\n", ((int*)m1)[2], count);
 
 		m1 = *(char**)m1;
 		count++;
