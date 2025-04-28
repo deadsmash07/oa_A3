@@ -64,7 +64,7 @@ uint select_victim_page(struct proc *p, pte_t **victim_pte) {
   // You can search user space in steps of PGSIZE.
   for(va = 0; va < p->sz; va += PGSIZE) {
     pte = walkpgdir(p->pgdir, (char*)va, 0);
-    if(pte && (*pte & PTE_P)) {
+    if(pte && (*pte & PTE_P) && !(*pte & PTE_A)) {
       if(victim_pte)
         *victim_pte = pte;
       return va;
@@ -132,7 +132,7 @@ int swap_out_page(void) {
   }
   
   // 5. Update the page table entry: clear the PTE_P flag.
-  *victim_pte = (slot << 12);
+  *victim_pte = (slot << 12) | (PTE_FLAGS(*victim_pte) & ~PTE_P);;
 ;
   
   // 6. Adjust the process's resident page count.

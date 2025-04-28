@@ -39,15 +39,15 @@ void clear_pte_a_for_10_percent() {
         pte_t *pte;
         uint va;
         // Walk the page table and clear PTE_A for ~10% of pages
-        acquire(&tickslock);
-        uint count = ticks;
-        release(&tickslock);
-        uint start = count%p->sz;
-        start = PGSIZE * (start / PGSIZE); // Align to page size
-        for(va = start; va < p->sz; va += PGSIZE) {
-            count++;
+        // acquire(&tickslock);
+        // uint count = ticks;
+        // release(&tickslock);
+        // uint start = count%p->sz;
+        // start = PGSIZE * (start / PGSIZE); // Align to page size
+        for(va = 0; va < p->sz; va += PGSIZE) {
+            // count++;
             pte = walkpgdir(p->pgdir, (char *) va, 0); // Get PTE
-            if(pte && (*pte & PTE_A) && (count % 10 == 0)) { // 10% chance
+            if(pte && (*pte & PTE_A) ) { 
                 *pte &= ~PTE_A; // Clear Accessed bit
             }
         }
@@ -171,7 +171,7 @@ trap(struct trapframe *tf)
       wakeup(&ticks);
       release(&tickslock);
     }
-    // clear_pte_a_for_10_percent();
+    clear_pte_a_for_10_percent();
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE:
