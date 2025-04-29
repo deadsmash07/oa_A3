@@ -104,7 +104,7 @@ exec(char *path, char **argv)
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
   curproc->rss = (sz + PGSIZE - 1) / PGSIZE;
-
+  // if(curproc->pid==1) cprintf("%d %d\n", curproc->sz, curproc->rss);
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;

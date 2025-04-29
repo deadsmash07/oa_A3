@@ -213,6 +213,12 @@ consoleintr(int (*getc)(void))
         consputc(BACKSPACE);
       }
       break;
+    case C('I'):  // Ctrl+I detected (ASCII 9)
+      release(&cons.lock);
+      cprintf("Ctrl+I is detected by xv6\n");
+      meminfo();
+      acquire(&cons.lock);
+      break;
     default:
       if(c != 0 && input.e-input.r < INPUT_BUF){
         c = (c == '\r') ? '\n' : c;

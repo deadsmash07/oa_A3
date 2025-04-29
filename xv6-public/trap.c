@@ -39,18 +39,21 @@ void clear_pte_a_for_10_percent() {
         pte_t *pte;
         uint va;
         // Walk the page table and clear PTE_A for ~10% of pages
-        acquire(&tickslock);
-        uint count = ticks;
-        release(&tickslock);
-        uint start = count%p->sz;
-        start = PGSIZE * (start / PGSIZE); // Align to page size
+        // acquire(&tickslock);
+        // uint count = ticks;
+        // release(&tickslock);
+        // uint start = count%p->sz;
+        // start = PGSIZE * (start / PGSIZE); // Align to page size
+        int count = 0;
         for(va = 0; va < p->sz; va += PGSIZE) {
-            count++;
+            
             pte = walkpgdir(p->pgdir, (char *) va, 0); // Get PTE
-            if(pte && (*pte & PTE_A) && (*pte & PTE_P) ) { 
+            if(pte && (*pte & PTE_P) ) { 
+                if(*pte & PTE_U)count++;
                 *pte &= ~PTE_A; // Clear Accessed bit
             }
         }
+        p->rss = count;
     }
 }
 
@@ -160,7 +163,7 @@ trap(struct trapframe *tf)
     }
     *pte &= ~PTE_A;
   
-    p->rss++;
+    if(*pte & PTE_U) p->rss++;
     // cprintf("Swapped in page at 0x%x from slot %d\n", fault_va, slot);
 
     break;

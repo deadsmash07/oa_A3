@@ -139,7 +139,7 @@ int swap_out_page(void) {
   // 6. Adjust the process's resident page count.
   // Using myproc() might not be applicable here since we're in the context of the victim process.
   // So, do:
-  vp->rss--;
+  if(swap_slots[slot].page_perm & PTE_U) vp->rss--;
   
 //   release(&swtchlock);
   

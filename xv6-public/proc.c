@@ -112,7 +112,6 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-  p->rss = 0;
   return p;
 }
 
@@ -533,4 +532,20 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+void
+meminfo(void)
+{
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  cprintf("PID\tNUM_PAGES\n");
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == SLEEPING || p->state == RUNNABLE || p->state == RUNNING){
+      cprintf("%d\t%d\n", p->pid,  p->rss);
+      // if(p->pid == 1) cprintf("%d\n", p->sz);
+    }
+  }
+  release(&ptable.lock);
 }

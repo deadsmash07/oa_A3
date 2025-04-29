@@ -265,21 +265,25 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   if(newsz >= oldsz)
     return oldsz;
-
+  // cprintf("deallocuvm called by %d\n", myproc()->pid);
   a = PGROUNDUP(newsz);
   for(; a  < oldsz; a += PGSIZE){
     pte = walkpgdir(pgdir, (char*)a, 0);
     if(!pte)
       a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
     else if((*pte & PTE_P) != 0){
+      int u = (*pte & PTE_U);
       pa = PTE_ADDR(*pte);
       if(pa == 0)
         panic("kfree");
       char *v = P2V(pa);
       kfree(v);
       *pte = 0;
-      if(myproc() != 0)
+      if(myproc() != 0 && u){
         myproc()->rss--;
+        // if(myproc()->rss < 0)
+        //   panic("deallocuvm: rss < 0");
+      }
     }
   }
   return newsz;
